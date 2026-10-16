@@ -88,6 +88,8 @@ ul{list-style:none}
 .lab.fz small{display:block;font-size:9px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .legend{background:var(--surface);border:1px solid var(--line);padding:10px 12px;border-radius:8px;color:var(--text);font-size:11px;line-height:1.8;box-shadow:0 4px 14px var(--shadow)}
 .legend .t{font-weight:800;color:var(--ink);margin-bottom:2px}
+.legend .grad{width:170px;height:12px;border-radius:6px;margin:6px 0 3px;border:1px solid var(--line)}
+.legend .gl{display:flex;justify-content:space-between;color:var(--mut);line-height:1.5}
 .legend i{display:inline-block;width:14px;height:14px;margin-right:6px;border-radius:3px;vertical-align:-3px}
 .leaflet-container{font-family:inherit;background:var(--soft)}
 .leaflet-bar a{color:var(--ink);background:var(--surface);border-color:var(--line)}.leaflet-bar a:hover{background:var(--soft)}.leaflet-bar{border-color:var(--line)!important}
@@ -142,7 +144,13 @@ function emFoco(p){return nivel!=='ce'||!reg||p.reg===reg;}
 function estilo(f){const p=f.properties,s={color:T.stroke,weight:nivel==='ce'?.6:1,fillOpacity:.92};
   if(nivel==='ce'&&!emFoco(p))return{...s,fillColor:T.faded,fillOpacity:.6};
   if(!p.v)return{...s,fillColor:T.zero};
-  let i=0;const x=val(p);for(let k=0;k<brk.length;k++)if(x>=brk[k])i=k;return{...s,fillColor:ramp[i]};}
+  const t=heat(val(p));return{...s,fillColor:mix(t),fillOpacity:.14+.86*t};}
+// intensidade contínua (estilo mapa de calor sem mancha): mais votos = vermelho forte e opaco, menos = âmbar fraco e transparente
+const C0=[247,170,60],C1=[205,30,22];
+const mix=t=>'rgb('+C0.map((c,i)=>Math.round(c+(C1[i]-c)*t)).join(',')+')';
+let ord=[];
+function heat(x){const n=ord.length;if(!n||x<=0)return 0;let lo=0,hi=n;while(lo<hi){const m=(lo+hi)>>1;if(ord[m]<x)lo=m+1;else hi=m;}
+  const pctl=n>1?lo/(n-1):1,mag=Math.sqrt(x/ord[n-1]);return Math.min(1,.6*pctl+.4*mag);}
 const camCid=L.geoJSON(CIDADES,{style:estilo,onEachFeature:(f,l)=>{byCid[f.properties.nome]=l;
   l.on({mouseover:()=>hover(l,'c'),mouseout:unhover,click:()=>clicaCidade(f.properties.nome)});}});
 const camBai=L.geoJSON(BAIRROS,{style:estilo,onEachFeature:(f,l)=>{byBai[f.properties.nome]=l;
@@ -200,7 +208,9 @@ function drawLabels(){if(labels)map.removeLayer(labels);const mk=[];
 function drawLegend(){if(legend)legend.remove();legend=L.control({position:'bottomright'});
   legend.onAdd=()=>{const d=L.DomUtil.create('div','legend');L.DomEvent.disableClickPropagation(d);
     let r=`<div class="t">${metric==='v'?'Votos':'% dos válidos'} por ${nivel==='for'?'bairro':'cidade'}</div><div><i style="background:${T.zero}"></i>sem votos</div>`;
-    for(let i=0;i<brk.length;i++){const lo=brk[i],hi=brk[i+1];r+=`<div><i style="background:${ramp[i]}"></i>${i<brk.length-1?(metric==='v'?fmt(Math.max(1,Math.round(lo)))+'–'+fmt(Math.round(hi)-1):fmtV(lo)+' – '+fmtV(hi)):fmtV(lo)+'+'}</div>`;}
+    const st=[0,.25,.5,.75,1].map(t=>{const c=mix(t).slice(4,-1);return `rgba(${c},${(.14+.86*t).toFixed(2)}) ${t*100}%`;}).join(',');
+    const q=f=>ord.length?ord[Math.min(ord.length-1,Math.floor(f*(ord.length-1)))]:0;
+    r+=`<div class="grad" style="background:linear-gradient(90deg,${st})"></div><div class="gl"><span>menos</span><span>mais</span></div><div class="gl"><span>${fmtV(q(0))}</span><span>${fmtV(q(.5))}</span><span>${fmtV(q(1))}</span></div>`;
     d.innerHTML=r;return d;};
   legend.addTo(map);}
 
@@ -243,7 +253,7 @@ function renderSide(){
 
 function render(){const camada=nivel==='for'?camBai:camCid;
   if(nivel==='for'){if(map.hasLayer(camCid))map.removeLayer(camCid);camBai.addTo(map);}else{if(map.hasLayer(camBai))map.removeLayer(camBai);camCid.addTo(map);}
-  brk=breaks((nivel==='for'?BAIRROS:CIDADES).features.map(f=>f.properties).filter(emFoco).map(val));
+  ord=(nivel==='for'?BAIRROS:CIDADES).features.map(f=>f.properties).filter(emFoco).map(val).filter(x=>x>0).sort((a,b)=>a-b);
   camada.setStyle(estilo);drawSel();drawLabels();drawLegend();renderSide();unhover();
   $('mV').classList.toggle('on',metric==='v');$('mP').classList.toggle('on',metric==='p');}
 function entrarRegiao(r,selNome){if(r==='Fortaleza'&&false)return;nivel='ce';reg=r;sel=selNome||null;render();map.flyToBounds(regB[r],{padding:[40,40],duration:.6});syncHash();}
@@ -266,5 +276,9 @@ $('foot').innerHTML=`Fonte: TSE, votação por seção e locais de votação, El
   if(h.get('m')==='p')metric='p';if(REG[h.get('r')])reg=h.get('r');
   const s=h.get('s');
   if(h.get('f')==='1'){nivel='for';if(s&&byBai[s])sel=s;}else if(s&&byCid[s]){sel=s;}
-  map.fitBounds(nivel==='for'?forB:reg?regB[reg]:ceB,{padding:[20,20]});render();})();
+  const alvo=()=>nivel==='for'?forB:reg?regB[reg]:ceB;
+  // se a aba abrir escondida (mapa com tamanho zero), espera aparecer para enquadrar
+  if(map.getSize().x>0)map.fitBounds(alvo(),{padding:[20,20]});
+  else{map.setView([-5.2,-39.5],7);const ro=new ResizeObserver(()=>{if($('map').clientWidth>0){ro.disconnect();map.invalidateSize();map.fitBounds(alvo(),{padding:[20,20]});drawLabels();}});ro.observe($('map'));}
+  render();})();
 </script></body></html>
