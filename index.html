@@ -303,7 +303,7 @@ function drawLegend(){if(legend)legend.remove();legend=L.control({position:'bott
 // listas da lateral: itens {nome,v,val,go,hov}
 let itensL=[];
 function lista(el,arr){const base=itensL.length;itensL.push(...arr);const mx=Math.max(1e-9,...arr.map(b=>val(b)));
-  $(el).innerHTML=arr.map((b,k)=>`<li class="${b.on?'sel':''}" onmouseenter="itensL[${base+k}].hov&&itensL[${base+k}].hov()" onmouseleave="unhover()" onclick="itensL[${base+k}].go()"><span class="bn" title="${esc(b.nome)}">${esc(b.nome)}</span><span class="bar"><i style="width:${Math.round(val(b)/mx*100)}%"></i></span><span class="bv">${fmtV(val(b))}</span><span class="bp">${metric==='v'?pct(b.v,b.val,0):fmt(b.v)}</span></li>`).join('');}
+  $(el).innerHTML=arr.map((b,k)=>`<li class="${b.on?'sel':''}" onmouseenter="itensL[${base+k}].hov&&itensL[${base+k}].hov()" onmouseleave="unhover()" onclick="itensL[${base+k}].go()"><span class="bn" title="${esc(b.nome)}">${esc(b.nome)}</span><span class="bar"><i style="width:${Math.round(val(b)/mx*100)}%"></i></span><span class="bv">${fmtV(val(b))}</span><span class="bp">${metric==='v'?pct(b.v,b.val,b.val&&b.v/b.val<.1?1:0):fmt(b.v)}</span></li>`).join('');}
 const stat=(n,l)=>`<div><b>${n}</b><span>${l}</span></div>`;
 const crumb=(txt,fn)=>fn?`<a href="#" onclick="${fn};return false">${esc(txt)}</a>`:`<span>${esc(txt)}</span>`;
 
