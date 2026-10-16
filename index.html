@@ -128,7 +128,7 @@ ul{list-style:none}
 <div class="body">
 <div class="tabs"><button id="tabCE" class="on" onclick="irCeara()">Ceará <small>por cidade</small></button><button id="tabFOR" onclick="entrarFortaleza()">Fortaleza <small>por bairro</small></button>
 <span class="icos"><button class="ico" id="theme" onclick="toggleTheme()" title="Trocar tema"></button><button class="ico" id="share" onclick="share()" title="Copiar link desta visão">🔗</button></span></div>
-<div class="toggle subv" id="subCE"><button id="vR" class="on" onclick="setVista('reg')">Regiões</button><button id="vC" onclick="setVista('cid')">Cidades</button></div>
+<div class="toggle subv" id="subCE"><button id="vC" class="on" onclick="setVista('cid')">Cidades</button><button id="vR" onclick="setVista('reg')">Regiões</button></div>
 <nav class="crumbs" id="crumbs"></nav>
 <h1 id="headline"></h1>
 <div id="subline"></div>
@@ -155,7 +155,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const M=META;
 // nivel: 'ce' (estado, com região opcional), 'cid' (dentro de uma cidade), 'for' (Fortaleza por bairro)
-let vista='reg',nivel='ce',reg=null,cidade=null,sel=null,metric='v',labels=null,outline=null,selLine=null,legend=null,pontos=null;
+let vista='cid',nivel='ce',reg=null,cidade=null,sel=null,metric='v',labels=null,outline=null,selLine=null,legend=null,pontos=null;
 
 const REG={};
 CIDADES.features.forEach(f=>{const p=f.properties;(REG[p.reg]=REG[p.reg]||{nome:p.reg,v:0,val:0,cid:[]});REG[p.reg].v+=p.v;REG[p.reg].val+=p.val;REG[p.reg].cid.push(p.nome);});
@@ -373,7 +373,7 @@ function voltar(){if(nivel==='cid'||nivel==='for'&&reg){reg?entrarRegiao(reg):ir
 function setMetric(m){metric=m;render();syncHash();}
 function setVista(v){vista=v;render();syncHash();}
 
-function syncHash(){const h=new URLSearchParams();if(metric==='p')h.set('m','p');if(vista==='cid'&&nivel==='ce'&&!reg)h.set('v','c');
+function syncHash(){const h=new URLSearchParams();if(metric==='p')h.set('m','p');if(vista==='reg'&&nivel==='ce'&&!reg)h.set('v','r');
   if(nivel==='cid')h.set('c',cidade);else if(nivel==='for'){h.set('f','1');if(reg)h.set('r',reg);}else if(reg)h.set('r',reg);
   if(sel)h.set('s',sel);history.replaceState(null,'',h.toString()?'#'+h.toString():location.pathname+location.search);}
 function share(){const b=$('share');(navigator.clipboard?navigator.clipboard.writeText(location.href):Promise.reject()).then(()=>{b.textContent='✓';},()=>{prompt('Copie o link:',location.href);}).finally(()=>setTimeout(()=>b.textContent='🔗',1800));}
@@ -385,7 +385,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(sel)unpin();else
 $('foot').innerHTML=`Fonte: TSE, votação por seção e locais de votação, Eleições 2026, 1º turno (dados abertos). Votos válidos = nominais + legenda para deputado estadual. Regiões: as 14 regiões de planejamento do Ceará (Lei Complementar estadual nº 154/2015). Bairros e localidades das cidades conforme o cadastro de locais de votação do TSE. Bairros de Fortaleza pela localização de cada local de votação; ${fmt(M.fortaleza_fora)} votos da capital vieram de locais sem endereço no TSE e não entram em nenhum bairro.`;
 
 (function init(){const h=new URLSearchParams(location.hash.slice(1));
-  if(h.get('m')==='p')metric='p';if(h.get('v')==='c')vista='cid';const s=h.get('s');
+  if(h.get('m')==='p')metric='p';if(h.get('v')==='r')vista='reg';const s=h.get('s');
   if(h.get('c')&&LOCAIS[h.get('c')]&&h.get('c')!=='Fortaleza'){nivel='cid';cidade=h.get('c');reg=byCid[cidade].feature.properties.reg;if(s)sel=s;}
   else if(h.get('f')==='1'){nivel='for';if(h.get('r')==='Fortaleza')reg='Fortaleza';if(s&&byBai[s])sel=s;}
   else if(REG[h.get('r')])reg=h.get('r');
