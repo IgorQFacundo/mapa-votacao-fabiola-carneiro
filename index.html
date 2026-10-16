@@ -111,7 +111,7 @@ ul{list-style:none}
 .crumbs a:hover{text-decoration:underline}
 .crumbs span{color:var(--ink);font-weight:700}
 .crumbs i{font-style:normal;color:var(--mut)}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .stats div{display:flex;flex-direction:column}
 .stats b{font-size:18px;font-weight:800;color:var(--ink);line-height:1.1}
 .stats span{font-size:11px;color:var(--mut);margin-top:3px;line-height:1.3}
@@ -121,6 +121,16 @@ ul{list-style:none}
 .ctitle b{font-size:16px;font-weight:800;display:block;line-height:1.15}
 .ctitle span{color:var(--mut);font-size:11px;font-weight:600}
 .overrow{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.stats button{all:unset;box-sizing:border-box;display:flex;flex-direction:column;cursor:pointer;border-radius:6px;padding:5px 7px;margin:-6px 0;border:1px dashed var(--line)}
+.stats button:hover{border-color:var(--laranja);border-style:solid}
+.stats button:focus-visible{outline:2px solid var(--laranja)}
+.stats button.on{background:var(--hl);border:1px solid var(--laranja)}
+.stats button.on span{color:var(--text)}
+.stats button b:after{content:" ›";color:var(--acc-txt)}
+.stats button.on b:after{content:" ✓"}
+.ctitle .x2{border:0;background:none;color:var(--mut);font-size:15px;cursor:pointer;padding:0 0 0 10px;float:right;line-height:1}
+.ctitle .x2:hover{color:var(--ink)}
+.ctitle.dest{border-left-color:#E8A317}
 </style></head>
 <body><div id="wrap">
 <div id="side">
@@ -155,13 +165,15 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const M=META;
 // nivel: 'ce' (estado, com região opcional), 'cid' (dentro de uma cidade), 'for' (Fortaleza por bairro)
-let vista='cid',nivel='ce',reg=null,cidade=null,sel=null,metric='v',labels=null,outline=null,selLine=null,legend=null,pontos=null;
+let dest=false,vista='cid',nivel='ce',reg=null,cidade=null,sel=null,metric='v',labels=null,outline=null,selLine=null,legend=null,pontos=null;
 
 const REG={};
 CIDADES.features.forEach(f=>{const p=f.properties;(REG[p.reg]=REG[p.reg]||{nome:p.reg,v:0,val:0,cid:[]});REG[p.reg].v+=p.v;REG[p.reg].val+=p.val;REG[p.reg].cid.push(p.nome);});
 const REGS=Object.values(REG).sort((a,b)=>b.v-a.v);
 const regNome=r=>r;
 const regView=()=>nivel==='ce'&&!reg&&vista==='reg';
+// destaque: acende só as cidades onde ela foi a mais votada
+const lider=p=>p.pos===1,emDest=()=>dest&&nivel==='ce'&&!regView();
 
 function applyTheme(t){if(!THEMES[t])t='dark';document.documentElement.dataset.theme=t;T=THEMES[t];
   $('theme').textContent=t==='dark'?'☀':'☾';$('theme').title=t==='dark'?'Tema claro':'Tema escuro';try{localStorage.setItem('tema-fc',t);}catch(e){}}
@@ -181,10 +193,11 @@ function heat(x){const n=ord.length;if(!n||x<=0)return 0;let lo=0,hi=n;while(lo<
 function estilo(f){const p=f.properties,s={color:T.stroke,weight:p.isReg?1.6:nivel==='for'?1:.6,fillOpacity:.92};
   if(nivel==='cid')return p.nome===cidade?{color:T.outline,weight:2.5,fillColor:T.cityBg,fillOpacity:1}:{...s,fillColor:T.faded,fillOpacity:.5};
   if(nivel==='ce'&&!emFoco(p))return{...s,fillColor:T.faded,fillOpacity:.6};
+  if(emDest()&&!p.isReg)return lider(p)?{color:T.outline,weight:2.2,fillColor:cor(),fillOpacity:.96}:{...s,fillColor:T.faded,fillOpacity:.45};
   if(!p.v)return{...s,fillColor:T.zero};
   return{...s,fillColor:cor(),fillOpacity:op(heat(val(p)))};}
 const camCid=L.geoJSON(CIDADES,{style:estilo,onEachFeature:(f,l)=>{byCid[f.properties.nome]=l;
-  l.on({mouseover:()=>{if(nivel==='cid'&&f.properties.nome===cidade)return;hover(l,'c');},mouseout:unhover,click:()=>{if(nivel==='cid'&&f.properties.nome===cidade)return;clicaCidade(f.properties.nome);}});}});
+  l.on({mouseover:()=>{if(nivel==='cid'&&f.properties.nome===cidade)return;hover(l,'c');},mouseout:unhover,click:()=>{if(nivel==='cid'&&f.properties.nome===cidade)return;if(emDest()&&!lider(f.properties)){sairDest();return;}clicaCidade(f.properties.nome);}});}});
 const camBai=L.geoJSON(BAIRROS,{style:estilo,onEachFeature:(f,l)=>{byBai[f.properties.nome]=l;
   l.on({mouseover:()=>hover(l,'b'),mouseout:unhover,click:()=>pin(f.properties.nome)});}});
 // regiões de planejamento: junta as cidades de cada região num contorno só
@@ -283,6 +296,7 @@ function drawLabels(){if(labels)map.removeLayer(labels);const mk=[],usados=[];
   if(nivel==='cid'){grupos.filter(g=>g.v).sort((a,b)=>b.v-a.v).slice(0,nl+3).forEach(g=>mk.push(lab([g.lat,g.lon],`${esc(g.nome)}${g.m.length>1?' +'+(g.m.length-1):''}<b>${fmtV(g.m.length>1?val(g):val(g.m[0]))}</b>`)));}
   else if(regView()){REGS.slice().sort((a,b)=>val(b)-val(a)).forEach(r=>{const c=REG[r.nome].cid.map(n=>byCid[n].getBounds()).reduce((s,b)=>{const a=(b.getNorth()-b.getSouth())*(b.getEast()-b.getWest()),k=b.getCenter();return[s[0]+k.lat*a,s[1]+k.lng*a,s[2]+a];},[0,0,0]);
     mk.push(lab([c[0]/c[2],c[1]/c[2]],`${esc(r.nome)}<b>${fmtV(val(r))}</b>`));});}
+  else if(emDest()){CIDADES.features.map(f=>f.properties).filter(p=>emFoco(p)&&lider(p)).sort((a,b)=>b.v-a.v).forEach(p=>mk.push(lab(byCid[p.nome].getBounds().getCenter(),`★ ${esc(p.nome)}<b>${fmt(p.v)} · ${pct(p.v,p.val,0)}</b>`)));}
   else{const fs=(nivel==='for'?BAIRROS:CIDADES).features.map(f=>f.properties).filter(emFoco).sort((a,b)=>val(b)-val(a)).slice(0,nivel==='ce'&&!reg?nl+1:nl);
     fs.forEach(p=>{const l=nivel==='for'?byBai[p.nome]:byCid[p.nome];mk.push(lab(l.getBounds().getCenter(),`${esc(p.nome)}<b>${fmtV(val(p))}</b>`));});
     if(nivel==='ce'&&(!reg||reg==='Fortaleza')&&!fs.some(p=>p.nome==='Fortaleza')){const p=byCid.Fortaleza.feature.properties;mk.push(lab(byCid.Fortaleza.getBounds().getCenter(),`Fortaleza<b>${fmtV(val(p))}</b>`));}}
@@ -291,6 +305,7 @@ map.on('zoomend',()=>{if(nivel==='cid')desenhaPontos();drawLabels();});
 
 function drawLegend(){if(legend)legend.remove();legend=L.control({position:'bottomright'});
   legend.onAdd=()=>{const d=L.DomUtil.create('div','legend');L.DomEvent.disableClickPropagation(d);
+    if(emDest()){d.innerHTML=`<div class="t">Destaque</div><div><i style="background:${cor()};outline:2px solid ${T.outline};outline-offset:-2px"></i>foi a mais votada</div><div><i style="background:${T.faded}"></i>demais cidades</div><div class="gl" style="margin-top:4px">Esc ou clique fora para sair</div>`;return d;}
     const qual=nivel==='cid'?'bairro/localidade':nivel==='for'?'bairro':regView()?'região':'cidade';
     let r=`<div class="t">${metric==='v'?'Votos':'% dos válidos'} por ${qual}</div><div><i style="background:${T.zero}"></i>sem votos</div>`;
     const st=[0,.25,.5,.75,1].map(t=>`rgba(${T.base.join(',')},${op(t).toFixed(2)}) ${t*100}%`).join(',');
@@ -305,6 +320,7 @@ let itensL=[];
 function lista(el,arr){const base=itensL.length;itensL.push(...arr);const mx=Math.max(1e-9,...arr.map(b=>val(b)));
   $(el).innerHTML=arr.map((b,k)=>`<li class="${b.on?'sel':''}" onmouseenter="itensL[${base+k}].hov&&itensL[${base+k}].hov()" onmouseleave="unhover()" onclick="itensL[${base+k}].go()"><span class="bn" title="${esc(b.nome)}">${esc(b.nome)}</span><span class="bar"><i style="width:${Math.round(val(b)/mx*100)}%"></i></span><span class="bv">${fmtV(val(b))}</span><span class="bp">${metric==='v'?pct(b.v,b.val,b.val&&b.v/b.val<.1?1:0):fmt(b.v)}</span></li>`).join('');}
 const stat=(n,l)=>`<div><b>${n}</b><span>${l}</span></div>`;
+const statB=(n,l,fn,on,tit)=>`<button class="${on?'on':''}" onclick="${fn}" title="${tit||''}"><b>${n}</b><span>${l}</span></button>`;
 const crumb=(txt,fn)=>fn?`<a href="#" onclick="${fn};return false">${esc(txt)}</a>`:`<span>${esc(txt)}</span>`;
 
 function renderSide(){itensL=[];const cid=CIDADES.features.map(f=>f.properties);
@@ -314,6 +330,8 @@ function renderSide(){itensL=[];const cid=CIDADES.features.map(f=>f.properties);
   if(nivel==='cid'){const pc=byCid[cidade].feature.properties;$('ctitle').innerHTML=`<b>${esc(cidade)}</b><span>${fmt(pc.v)} votos · ${pct(pc.v,pc.val)} dos válidos</span>`;$('ctitle').hidden=false;}
   else if(nivel==='ce'&&reg){$('ctitle').innerHTML=`<b>${esc(reg)}</b><span>${fmt(REG[reg].v)} votos · ${REG[reg].cid.length} cidades</span>`;$('ctitle').hidden=false;}
   else $('ctitle').hidden=true;
+  $('ctitle').classList.toggle('dest',emDest());
+  if(emDest()){const n=CIDADES.features.filter(f=>emFoco(f.properties)&&lider(f.properties)).length;$('ctitle').innerHTML=`<button class="x2" onclick="sairDest()" title="Sair do destaque">✕</button><b>★ 1º lugar em ${n} cidade${n>1?'s':''}</b><span>${reg?esc(reg)+' · ':''}clique fora ou Esc para sair</span>`;$('ctitle').hidden=false;}
   $('tags').innerHTML=`<span class="tag psb">PSB · nº ${M.nr}</span><span class="tag ok">Eleita · ${M.rank}ª mais votada do CE</span>`;
   const itCid=p=>({nome:p.nome,v:p.v,val:p.val,on:p.nome===cidade,go:()=>clicaCidade(p.nome),hov:()=>hover(byCid[p.nome],'c')});
   $('t2').hidden=false;$('l2').innerHTML='';$('t2').textContent='';
@@ -341,9 +359,10 @@ function renderSide(){itensL=[];const cid=CIDADES.features.map(f=>f.properties);
     $('headline').innerHTML=`<em>Fabiola Carneiro</em> teve mais força em <u>${esc(best.nome)}</u>`;
     $('subline').textContent=`${fmt(best.v)} votos ali, ${pct(best.v,best.val)} dos válidos. Região mais forte: ${REGS[0].nome} (${pct(REGS[0].v,M.total,0)} do total).`;
     $('kn').innerHTML=`${fmt(M.total)}<small>votos</small>`;$('kl').textContent=`${M.completo} · Deputada estadual`;
-    $('stats').innerHTML=stat(n1,`cidade${n1>1?'s':''} em 1º lugar`)+stat(`${com}/184`,'cidades com voto')+stat(pct(best.v,M.total,0),`do total em ${best.nome}`);
+    $('stats').innerHTML=statB(n1,`cidade${n1>1?'s':''} em 1º lugar`,'toggleDest()',dest,dest?'Clique para sair do destaque':'Acender no mapa só essas cidades')+stat(`${com}/184`,'cidades com voto')+statB(pct(best.v,M.total,0),`do total em ${best.nome}`,`clicaCidade(nomesCid[${nomesCid.indexOf(best.nome)}])`,false,`Abrir ${best.nome}`);
     $('t1').textContent='Regiões de planejamento · 14';
     lista('l1',REGS.slice().sort((a,b)=>val(b)-val(a)).map(r=>({nome:r.nome,v:r.v,val:r.val,go:()=>entrarRegiao(r.nome),hov:()=>{if(regView())setOutline('rr'+r.nome,[byReg[r.nome]]);else setOutline('r'+r.nome,r.cid.map(n=>byCid[n]));showCard(cardRegiao(r),true);}})));
+    if(dest){const ls=cid.filter(lider).sort((a,b)=>b.v-a.v);$('t2').textContent=`★ Onde foi a mais votada · ${ls.length}`;lista('l2',ls.map(itCid));return;}
     $('t2').textContent=`Cidades · ${metric==='v'?'mais votos':'maior % dos válidos'}`;
     lista('l2',cid.slice().sort((a,b)=>val(b)-val(a)).slice(0,20).map(itCid));return;}
   const R=REG[reg],cs=cid.filter(p=>p.reg===reg).sort((a,b)=>val(b)-val(a));
@@ -351,7 +370,8 @@ function renderSide(){itensL=[];const cid=CIDADES.features.map(f=>f.properties);
   $('headline').innerHTML=`<u>${esc(reg)}</u>: <em>${fmt(R.v)}</em> votos`;
   $('subline').textContent=`Mais forte em ${cs[0].nome} (${fmt(cs[0].v)}). Clique numa cidade para ver os locais de votação.`;
   $('kn').innerHTML=`${fmt(R.v)}<small>votos na região</small>`;$('kl').textContent=`${R.cid.length} cidades`;
-  $('stats').innerHTML=stat(pct(R.v,M.total,0),'do total dela')+stat(pct(R.v,R.val),'dos válidos')+stat(cs.filter(p=>p.pos===1).length,'cidades em 1º');
+  const n1r=cs.filter(lider).length;$('stats').innerHTML=stat(pct(R.v,M.total,0),'do total dela')+stat(pct(R.v,R.val),'dos válidos')+(n1r?statB(n1r,`cidade${n1r>1?'s':''} em 1º`,'toggleDest()',dest,dest?'Clique para sair do destaque':'Acender no mapa só essas cidades'):stat(0,'cidades em 1º'));
+  if(dest){const ls=cs.filter(lider);$('t1').textContent=`★ Onde foi a mais votada · ${ls.length}`;lista('l1',ls.map(itCid));$('t2').hidden=true;return;}
   $('t1').textContent=`Cidades da região · ${cs.length}`;lista('l1',cs.map(itCid));$('t2').hidden=true;}
 
 function focoLocalidade(b){sel='B'+b.nome;const ls=b.loc.map(i=>locs()[i]).filter(l=>l.lat!==null);
@@ -362,18 +382,24 @@ function focoLocal(l){sel='L'+l.i;if(l.lat!==null)map.flyTo([l.lat,l.lon],Math.m
 function render(){
   const cam=nivel==='for'?camBai:regView()?camReg:camCid;[camBai,camReg,camCid].forEach(c=>{if(c!==cam&&map.hasLayer(c))map.removeLayer(c);});cam.addTo(map);
   if(nivel!=='cid')ord=(regView()?REGS:(nivel==='for'?BAIRROS:CIDADES).features.map(f=>f.properties).filter(emFoco)).map(val).filter(x=>x>0).sort((a,b)=>a-b);
-  cam.setStyle(estilo);drawSel();desenhaPontos();drawLabels();drawLegend();renderSide();unhover();
+  cam.setStyle(estilo);if(emDest())CIDADES.features.forEach(f=>{if(lider(f.properties))byCid[f.properties.nome].bringToFront();});drawSel();desenhaPontos();drawLabels();drawLegend();renderSide();unhover();
   $('mV').classList.toggle('on',metric==='v');$('mP').classList.toggle('on',metric==='p');}
 function cidadeBounds(n){const b=L.latLngBounds([]);LOCAIS[n].forEach(a=>{if(a[2]!==null)b.extend([a[2],a[3]]);});return b.isValid()?b.pad(.15):byCid[n].getBounds();}
-function irCeara(){nivel='ce';reg=null;cidade=null;sel=null;render();map.flyToBounds(ceB,{padding:[20,20],duration:.6});syncHash();}
-function entrarRegiao(r){nivel='ce';reg=r;cidade=null;sel=null;render();map.flyToBounds(regB[r],{padding:[40,40],duration:.6});syncHash();}
-function entrarCidade(n){nivel='cid';cidade=n;reg=byCid[n].feature.properties.reg;sel=null;render();map.flyToBounds(cidadeBounds(n),{padding:[30,30],duration:.6,maxZoom:14});syncHash();}
-function entrarFortaleza(s){nivel='for';cidade=null;sel=s||null;if(reg!=='Fortaleza')reg=null;render();map.flyToBounds(forB,{padding:[30,30],duration:.6});syncHash();}
+function toggleDest(){dest=!dest;if(dest&&!reg)vista='cid';sel=null;cidade=null;nivel='ce';render();
+  if(dest){const b=L.latLngBounds([]);CIDADES.features.forEach(f=>{if(lider(f.properties)&&(!reg||f.properties.reg===reg))b.extend(byCid[f.properties.nome].getBounds());});map.flyToBounds(b.pad(.35),{duration:.6});}
+  else map.flyToBounds(reg?regB[reg]:ceB,{padding:[20,20],duration:.6});syncHash();}
+function sairDest(){if(dest)toggleDest();}
+map.on('click',e=>{if(!emDest())return;const t=e.originalEvent&&e.originalEvent.target;if(t&&t.classList&&t.classList.contains('leaflet-interactive'))return;sairDest();});
+$('side').addEventListener('click',e=>{if(emDest()&&!e.target.closest('button,a,li,input'))sairDest();});
+function irCeara(){dest=false;nivel='ce';reg=null;cidade=null;sel=null;render();map.flyToBounds(ceB,{padding:[20,20],duration:.6});syncHash();}
+function entrarRegiao(r){dest=false;nivel='ce';reg=r;cidade=null;sel=null;render();map.flyToBounds(regB[r],{padding:[40,40],duration:.6});syncHash();}
+function entrarCidade(n){dest=false;nivel='cid';cidade=n;reg=byCid[n].feature.properties.reg;sel=null;render();map.flyToBounds(cidadeBounds(n),{padding:[30,30],duration:.6,maxZoom:14});syncHash();}
+function entrarFortaleza(s){dest=false;nivel='for';cidade=null;sel=s||null;if(reg!=='Fortaleza')reg=null;render();map.flyToBounds(forB,{padding:[30,30],duration:.6});syncHash();}
 function voltar(){if(nivel==='cid'||nivel==='for'&&reg){reg?entrarRegiao(reg):irCeara();}else irCeara();}
 function setMetric(m){metric=m;render();syncHash();}
-function setVista(v){vista=v;render();syncHash();}
+function setVista(v){vista=v;if(v==='reg')dest=false;render();syncHash();}
 
-function syncHash(){const h=new URLSearchParams();if(metric==='p')h.set('m','p');if(vista==='reg'&&nivel==='ce'&&!reg)h.set('v','r');
+function syncHash(){const h=new URLSearchParams();if(metric==='p')h.set('m','p');if(vista==='reg'&&nivel==='ce'&&!reg)h.set('v','r');if(emDest())h.set('d','1');
   if(nivel==='cid')h.set('c',cidade);else if(nivel==='for'){h.set('f','1');if(reg)h.set('r',reg);}else if(reg)h.set('r',reg);
   if(sel)h.set('s',sel);history.replaceState(null,'',h.toString()?'#'+h.toString():location.pathname+location.search);}
 function share(){const b=$('share');(navigator.clipboard?navigator.clipboard.writeText(location.href):Promise.reject()).then(()=>{b.textContent='✓';},()=>{prompt('Copie o link:',location.href);}).finally(()=>setTimeout(()=>b.textContent='🔗',1800));}
@@ -381,11 +407,11 @@ $('q').addEventListener('change',e=>{const v=e.target.value.trim().toLowerCase()
   if(v.endsWith(' (fortaleza)')){n=nomesBai.find(x=>(x+' (fortaleza)').toLowerCase()===v);if(n)entrarFortaleza(n);}
   else{n=nomesCid.find(x=>x.toLowerCase()===v);if(n)clicaCidade(n);else{n=nomesBai.find(x=>x.toLowerCase()===v);if(n)entrarFortaleza(n);}}
   if(n){e.target.value='';e.target.blur();}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(sel)unpin();else if(nivel!=='ce'||reg)voltar();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(emDest())sairDest();else if(sel)unpin();else if(nivel!=='ce'||reg)voltar();}});
 $('foot').innerHTML=`Fonte: TSE, votação por seção e locais de votação, Eleições 2026, 1º turno (dados abertos). Votos válidos = nominais + legenda para deputado estadual. Regiões: as 14 regiões de planejamento do Ceará (Lei Complementar estadual nº 154/2015). Bairros e localidades das cidades conforme o cadastro de locais de votação do TSE. Bairros de Fortaleza pela localização de cada local de votação; ${fmt(M.fortaleza_fora)} votos da capital vieram de locais sem endereço no TSE e não entram em nenhum bairro.`;
 
 (function init(){const h=new URLSearchParams(location.hash.slice(1));
-  if(h.get('m')==='p')metric='p';if(h.get('v')==='r')vista='reg';const s=h.get('s');
+  if(h.get('m')==='p')metric='p';if(h.get('v')==='r')vista='reg';if(h.get('d')==='1')dest=true;const s=h.get('s');
   if(h.get('c')&&LOCAIS[h.get('c')]&&h.get('c')!=='Fortaleza'){nivel='cid';cidade=h.get('c');reg=byCid[cidade].feature.properties.reg;if(s)sel=s;}
   else if(h.get('f')==='1'){nivel='for';if(h.get('r')==='Fortaleza')reg='Fortaleza';if(s&&byBai[s])sel=s;}
   else if(REG[h.get('r')])reg=h.get('r');
